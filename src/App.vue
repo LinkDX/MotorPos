@@ -8,10 +8,15 @@ interface Assignment {
   type: '大' | '小';
 }
 
-type SwapTarget = { type: 'assigned'; index: number } | { type: 'candidate'; index: number } | null;
+type SwapTarget = 
+  | { type: 'assigned'; index: number } 
+  | { type: 'candidate'; index: number } 
+  | { type: 'secondCandidate'; index: number }
+  | null;
 
 const STORAGE_KEY = 'motor_pos_v2_results';
 const candidates = ref([...config.candidates]);
+const secondCandidates = ref([...config.secondCandidates]);
 const assignments = ref<Assignment[]>([]);
 const isRolling = ref(false);
 const swapSelection = ref<SwapTarget>(null);
@@ -21,27 +26,41 @@ onMounted(() => {
   if (saved) {
     const data = JSON.parse(saved);
     assignments.value = data.assignments || [];
-    const assignedIds = new Set(assignments.value.map(a => a.unitId));
-    candidates.value = config.candidates.filter(id => !assignedIds.has(id));
+    
+    // Recovery logic
+    const assignedIds = assignments.value.map(a => a.unitId);
+    
+    // For first candidates, they only appear once in assignments if they were in the list
+    const firstAssigned = new Set(assignedIds); 
+    candidates.value = config.candidates.filter(id => !firstAssigned.has(id));
+
+    // For second candidates, it's a bit trickier because one unit could have two spots.
+    // We need to count how many times they appear.
+    // Actually, it's easier to just store the remaining candidates in localStorage.
+    if (data.candidates) candidates.value = data.candidates;
+    if (data.secondCandidates) secondCandidates.value = data.secondCandidates;
   }
 });
 
-watch(assignments, (newVal) => {
+watch([assignments, candidates, secondCandidates], () => {
   localStorage.setItem(STORAGE_KEY, JSON.stringify({
-    assignments: newVal,
+    assignments: assignments.value,
     candidates: candidates.value,
+    secondCandidates: secondCandidates.value,
     lastUpdated: new Date().toISOString()
   }));
 }, { deep: true });
 
-const isFinished = computed(() => assignments.value.length >= config.totalSpaces);
+const isFirstRoundFinished = computed(() => candidates.value.length === 0 || assignments.value.length >= config.totalSpaces);
+const isAllFinished = computed(() => isFirstRoundFinished.value && (secondCandidates.value.length === 0 || assignments.value.length >= config.totalSpaces));
 
-const drawAll = () => {
-  if (isRolling.value || isFinished.value) return;
+const drawNext = () => {
+  if (isRolling.value || isAllFinished.value) return;
   isRolling.value = true;
   
   setTimeout(() => {
-    const pool = [...candidates.value];
+    const isFirstRound = candidates.value.length > 0;
+    const pool = isFirstRound ? [...candidates.value] : [...secondCandidates.value];
     const newAssignments: Assignment[] = [...assignments.value];
     const startIdx = newAssignments.length;
     const countToDraw = Math.min(config.totalSpaces - startIdx, pool.length);
@@ -51,53 +70,30 @@ const drawAll = () => {
       const randomIndex = Math.floor(Math.random() * pool.length);
       const picked = pool.splice(randomIndex, 1)[0];
       
-      newAssignments.push({
-        spaceNumber: currentSpaceNum,
-        unitId: picked,
-        type: currentSpaceNum <= config.bigSpacesCount ? '大' : '小'
-      });
+      if (picked) {
+        newAssignments.push({
+          spaceNumber: currentSpaceNum,
+          unitId: picked,
+          type: currentSpaceNum <= config.bigSpacesCount ? '大' : '小'
+        });
+      }
     }
 
     assignments.value = newAssignments;
-    candidates.value = pool;
+    if (isFirstRound) {
+      candidates.value = pool;
+    } else {
+      secondCandidates.value = pool;
+    }
     isRolling.value = false;
   }, 800);
-};
-
-const handleSwap = (target: SwapTarget) => {
-  if (!target) return;
-
-  if (swapSelection.value === null) {
-    swapSelection.value = target;
-  } else {
-    const s1 = swapSelection.value;
-    const s2 = target;
-
-    if (!(s1.type === s2.type && s1.index === s2.index)) {
-      let val1: string, val2: string;
-
-      // Get values
-      if (s1.type === 'assigned') val1 = assignments.value[s1.index].unitId;
-      else val1 = candidates.value[s1.index];
-
-      if (s2.type === 'assigned') val2 = assignments.value[s2.index].unitId;
-      else val2 = candidates.value[s2.index];
-
-      // Set values
-      if (s1.type === 'assigned') assignments.value[s1.index].unitId = val2;
-      else candidates.value[s1.index] = val2;
-
-      if (s2.type === 'assigned') assignments.value[s2.index].unitId = val1;
-      else candidates.value[s2.index] = val1;
-    }
-    swapSelection.value = null;
-  }
 };
 
 const reset = () => {
   if (confirm('確定要清除所有結果並重置嗎？')) {
     assignments.value = [];
     candidates.value = [...config.candidates];
+    secondCandidates.value = [...config.secondCandidates];
     localStorage.removeItem(STORAGE_KEY);
     swapSelection.value = null;
   }
@@ -122,8 +118,54 @@ const exportCSV = () => {
 const getSelectionLabel = () => {
   if (!swapSelection.value) return '';
   const s = swapSelection.value;
-  if (s.type === 'assigned') return `車位 ${assignments.value[s.index].spaceNumber}`;
-  return `未中籤名單中的 ${candidates.value[s.index]}`;
+  if (s.type === 'assigned') return `車位 ${assignments.value[s.index]?.spaceNumber}`;
+  if (s.type === 'candidate') return `第一輪名單中的 ${candidates.value[s.index]}`;
+  return `第二輪名單中的 ${secondCandidates.value[s.index]}`;
+};
+
+const handleSwap = (target: SwapTarget) => {
+  if (!target) return;
+
+  if (swapSelection.value === null) {
+    swapSelection.value = target;
+  } else {
+    const s1 = swapSelection.value;
+    const s2 = target;
+
+    if (!(s1.type === s2.type && s1.index === s2.index)) {
+      let val1 = '';
+      let val2 = '';
+
+      // Get values
+      if (s1.type === 'assigned') val1 = assignments.value[s1.index]?.unitId || '';
+      else if (s1.type === 'candidate') val1 = candidates.value[s1.index] || '';
+      else val1 = secondCandidates.value[s1.index] || '';
+
+      if (s2.type === 'assigned') val2 = assignments.value[s2.index]?.unitId || '';
+      else if (s2.type === 'candidate') val2 = candidates.value[s2.index] || '';
+      else val2 = secondCandidates.value[s2.index] || '';
+
+      // Set values
+      if (s1.type === 'assigned') {
+        const item = assignments.value[s1.index];
+        if (item) item.unitId = val2;
+      } else if (s1.type === 'candidate') {
+        candidates.value[s1.index] = val2;
+      } else {
+        secondCandidates.value[s1.index] = val2;
+      }
+
+      if (s2.type === 'assigned') {
+        const item = assignments.value[s2.index];
+        if (item) item.unitId = val1;
+      } else if (s2.type === 'candidate') {
+        candidates.value[s2.index] = val1;
+      } else {
+        secondCandidates.value[s2.index] = val1;
+      }
+    }
+    swapSelection.value = null;
+  }
 };
 </script>
 
@@ -141,8 +183,11 @@ const getSelectionLabel = () => {
     <div class="layout">
       <section class="side-panel">
         <div class="card actions-card">
-          <button @click="drawAll" :disabled="isRolling || isFinished" class="btn btn-main">
-            {{ isRolling ? '正在隨機分配...' : (isFinished ? '抽選完畢' : '一次抽出所有車位') }}
+          <button @click="drawNext" :disabled="isRolling || isAllFinished" class="btn btn-main">
+            <template v-if="isRolling">正在隨機分配...</template>
+            <template v-else-if="isAllFinished">抽選完畢</template>
+            <template v-else-if="candidates.length > 0">第一輪：一次抽出所有車位</template>
+            <template v-else>第二輪：抽選剩餘車位</template>
           </button>
           
           <div class="grid-2">
@@ -158,7 +203,7 @@ const getSelectionLabel = () => {
         </div>
 
         <div class="card candidates-card">
-          <h3>未中籤名單 ({{ candidates.length }})</h3>
+          <h3>第一輪待抽 ({{ candidates.length }})</h3>
           <div class="candidate-list">
             <div 
               v-for="(id, idx) in candidates" 
@@ -166,6 +211,19 @@ const getSelectionLabel = () => {
               class="candidate-item"
               :class="{ 'swapping': swapSelection?.type === 'candidate' && swapSelection?.index === idx }"
               @click="handleSwap({ type: 'candidate', index: idx })"
+            >
+              {{ id }}
+            </div>
+          </div>
+          
+          <h3 style="margin-top: 1.5rem">第二輪待抽 ({{ secondCandidates.length }})</h3>
+          <div class="candidate-list">
+            <div 
+              v-for="(id, idx) in secondCandidates" 
+              :key="id" 
+              class="candidate-item"
+              :class="{ 'swapping': swapSelection?.type === 'secondCandidate' && swapSelection?.index === idx }"
+              @click="handleSwap({ type: 'secondCandidate', index: idx })"
             >
               {{ id }}
             </div>
