@@ -27,6 +27,7 @@ const secondCandidates = ref<string[]>([]);
 const assignments = ref<Assignment[]>([]);
 const isRolling = ref(false);
 const swapSelection = ref<SwapTarget>(null);
+const filterQuery = ref('');
 
 const tempConfigStr = ref({
   candidates: '',
@@ -69,6 +70,15 @@ watch([assignments, candidates, secondCandidates], () => {
 watch(config, (newVal) => {
   localStorage.setItem(CONFIG_KEY, JSON.stringify(newVal));
 }, { deep: true });
+
+const filteredAssignments = computed(() => {
+  if (!filterQuery.value.trim()) return assignments.value;
+  const q = filterQuery.value.toLowerCase();
+  return assignments.value.filter(a => 
+    a.unitId.toLowerCase().includes(q) || 
+    a.spaceNumber.toString().includes(q)
+  );
+});
 
 const isFirstRoundFinished = computed(() => candidates.value.length === 0 || assignments.value.length >= config.value.totalSpaces);
 const isAllFinished = computed(() => isFirstRoundFinished.value && (secondCandidates.value.length === 0 || assignments.value.length >= config.value.totalSpaces));
@@ -311,15 +321,21 @@ const handleSwap = (target: SwapTarget) => {
         <div class="card result-card">
           <div class="result-header">
             <h3>車位分配結果</h3>
-            <div class="legend">
-              <span class="legend-item"><i class="dot big"></i> 大車位</span>
-              <span class="legend-item"><i class="dot small"></i> 小車位</span>
+            <div class="header-actions">
+              <div v-if="assignments.length > 0" class="search-box">
+                <input v-model="filterQuery" type="text" placeholder="搜尋車位或住戶...">
+                <span v-if="filterQuery" @click="filterQuery = ''" class="search-clear">×</span>
+              </div>
+              <div class="legend">
+                <span class="legend-item"><i class="dot big"></i> 大車位</span>
+                <span class="legend-item"><i class="dot small"></i> 小車位</span>
+              </div>
             </div>
           </div>
 
           <div class="result-grid">
             <div 
-              v-for="(a, idx) in assignments" 
+              v-for="(a, idx) in filteredAssignments" 
               :key="a.spaceNumber" 
               class="space-item"
               :class="[a.type === '大' ? 'type-big' : 'type-small', { 'swapping': swapSelection?.type === 'assigned' && swapSelection?.index === idx }]"
@@ -332,17 +348,22 @@ const handleSwap = (target: SwapTarget) => {
               </div>
             </div>
 
-            <div 
-              v-for="i in Math.max(0, config.totalSpaces - assignments.length)" 
-              :key="'empty-'+i" 
-              class="space-item empty"
-              :class="(assignments.length + i) <= config.bigSpacesCount ? 'type-big' : 'type-small'"
-            >
-              <div class="space-badge">{{ (assignments.length + i) <= config.bigSpacesCount ? '大' : '小' }}</div>
-              <div class="space-info">
-                <span class="no">#{{ assignments.length + i }}</span>
-                <span class="unit">待抽</span>
+            <template v-if="!filterQuery">
+              <div 
+                v-for="i in Math.max(0, config.totalSpaces - assignments.length)" 
+                :key="'empty-'+i" 
+                class="space-item empty"
+                :class="(assignments.length + i) <= config.bigSpacesCount ? 'type-big' : 'type-small'"
+              >
+                <div class="space-badge">{{ (assignments.length + i) <= config.bigSpacesCount ? '大' : '小' }}</div>
+                <div class="space-info">
+                  <span class="no">#{{ assignments.length + i }}</span>
+                  <span class="unit">待抽</span>
+                </div>
               </div>
+            </template>
+            <div v-else-if="filteredAssignments.length === 0" class="no-results">
+              <p>找不到符合「{{ filterQuery }}」的結果</p>
             </div>
           </div>
         </div>
@@ -404,20 +425,26 @@ header { color: white; padding: 2rem; text-align: center; position: relative; }
 .candidate-item:hover { background: #e2e8f0; }
 .candidate-item.swapping { border-color: #3b82f6; background: #eff6ff; animation: pulse 1s infinite; }
 
-.result-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 1.5rem; }
-.legend { display: flex; gap: 1rem; font-size: 0.85rem; }
-.legend-item { display: flex; align-items: center; gap: 0.4rem; }
-.dot { width: 10rem; width: 8px; height: 8px; border-radius: 50%; }
+.result-header { display: flex; justify-content: space-between; align-items: flex-start; margin-bottom: 1.5rem; gap: 1rem; flex-wrap: wrap; }
+.header-actions { display: flex; align-items: center; gap: 1.5rem; flex-wrap: wrap; flex-grow: 1; justify-content: flex-end; }
+.search-box { position: relative; width: 240px; }
+.search-box input { width: 100%; padding: 0.5rem 2rem 0.5rem 0.8rem; border: 1px solid #cbd5e0; border-radius: 8px; font-size: 0.9rem; box-sizing: border-box; }
+.search-clear { position: absolute; right: 8px; top: 50%; transform: translateY(-50%); color: #94a3b8; cursor: pointer; font-size: 1.2rem; }
+
+.legend { display: flex; gap: 1rem; font-size: 0.85rem; background: #f8fafc; padding: 0.5rem 0.8rem; border-radius: 8px; border: 1px solid #e2e8f0; }
+.legend-item { display: flex; align-items: center; gap: 0.4rem; white-space: nowrap; }
+.dot { width: 8px; height: 8px; border-radius: 50%; }
 .dot.big { background: var(--big-color); }
 .dot.small { background: var(--small-color); }
 
 .result-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 1rem; }
+.no-results { grid-column: 1 / -1; padding: 3rem; text-align: center; color: #64748b; background: #f8fafc; border-radius: 12px; }
 
 .space-item { border-radius: 10px; border: 2px solid transparent; cursor: pointer; transition: 0.2s; overflow: hidden; position: relative; }
 .space-item:hover { transform: translateY(-3px); box-shadow: 0 10px 15px -3px rgba(0,0,0,0.1); }
 .space-item.swapping { border-color: #3b82f6; box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.2); animation: pulse 1s infinite; }
 
-.space-badge { font-size: 0.7rem; font-weight: bold; color: white; padding: 2px 8px; position: absolute; top: 0; right: 0; border-bottom-left-radius: 8px; }
+.space-badge { font-size: 0.7rem; font-weight: bold; color: white; padding: 2px 8px; position: absolute; top: 0; right: 0; border-bottom-left-radius: 8px; z-index: 1; }
 
 .type-big { background: #eff6ff; border-color: #dbeafe; }
 .type-big .space-badge { background: var(--big-color); }
@@ -439,5 +466,9 @@ header { color: white; padding: 2rem; text-align: center; position: relative; }
 @media (max-width: 1024px) {
   .layout { grid-template-columns: 1fr; }
   .actions-card { position: static; }
+  .result-header { flex-direction: column; align-items: stretch; }
+  .header-actions { flex-direction: column; align-items: stretch; gap: 1rem; }
+  .search-box { width: 100%; }
+  .legend { justify-content: center; }
 }
 </style>

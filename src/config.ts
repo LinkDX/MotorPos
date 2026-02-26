@@ -8,7 +8,7 @@ export interface LotteryConfig {
 }
 
 export const config: LotteryConfig = {
-  title: "社區車位抽選系統 (大小車位版)",
+  title: "社區車位抽選系統",
   totalSpaces: 12,
   bigSpacesCount: 4, // 前 4 個是大車位
   candidates: [
