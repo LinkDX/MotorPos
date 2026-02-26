@@ -1,5 +1,53 @@
-# Vue 3 + TypeScript + Vite
+# 社區車位抽選系統 (大小車位版)
 
-This template should help get you started developing with Vue 3 and TypeScript in Vite. The template uses Vue 3 `<script setup>` SFCs, check out the [script setup docs](https://v3.vuejs.org/api/sfc-script-setup.html#sfc-script-setup) to learn more.
+這是一個基於 Vue 3 + TypeScript 開發的車位抽選系統，專為處理社區機車位分配而設計，支援大小車位區分、兩輪抽選機制以及即時結果調整。
 
-Learn more about the recommended Project Setup and IDE Support in the [Vue Docs TypeScript Guide](https://vuejs.org/guide/typescript/overview.html#project-setup).
+## 🌟 主要功能
+
+- **兩輪抽選機制**：
+  - **第一輪**：針對優先報名名單進行抽選。
+  - **第二輪**：若第一輪結束後仍有剩餘車位，系統會自動轉換為第二輪名單抽選（適合想抽第二個位置的住戶）。
+- **靈活配置**：支援在網頁上直接修改標題、車位總數、大車位數量及佈景顏色。
+- **名單編輯**：可直接在介面上貼入住戶編號名單（每行一個）。
+- **即時過濾**：抽選後可透過車位編號或住戶 ID 快速搜尋篩選結果。
+- **手動交換 (Manual Swap)**：支援點擊已中籤車位或待抽名單進行即時交換調整。
+- **資料持久化**：所有設定與抽選結果皆會自動保存於瀏覽器的 Local Storage，重新整理也不會遺失。
+- **結果導出**：支援一鍵導出包含車位編號、類型與中籤住戶的 CSV 檔案。
+
+## 🚀 快速開始
+
+### 開發環境架設
+
+```bash
+# 安裝依賴
+npm install
+
+# 啟動開發伺服器
+npm run dev
+
+# 建構生產版本
+npm run build
+```
+
+## 🛠 使用說明
+
+### 1. 系統設定
+點擊頁面頂部標題旁的 **⚙️ 齒輪圖示** 開啟設定面板。
+- **總車位數**：設定社區可供抽籤的車位總量。
+- **大車位數量**：設定編號 1 號開始的前 X 個車位為「大車位」。
+- **名單輸入**：分別在兩個文字方塊中輸入第一輪與第二輪的參與名單。
+
+### 2. 執行抽選
+點擊左側面板的「抽選」按鈕：
+- 系統會先消耗第一輪名單。
+- 當第一輪抽完且車位還有剩時，按鈕會變更為第二輪抽選。
+
+### 3. 結果調整與篩選
+- **搜尋**：在結果區域上方的搜尋框輸入編號，可即時過濾結果（僅在有結果時顯示）。
+- **交換**：點擊任意一個中籤格子，再點擊另一個（或左側待抽名單中的人），即可完成位置調換。
+
+### 4. 重置
+點擊「重置系統」將清除所有抽選結果，並讓新的名單設定生效。
+
+## 📄 授權
+本專案採用 MIT 授權。
