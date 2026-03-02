@@ -1,7 +1,7 @@
 export interface LotteryConfig {
   title: string;
   totalSpaces: number;
-  bigSpacesCount: number; // The first X spaces are Big
+  bigSpaceNumbers: number[]; // 特定的大車位編號
   candidates: string[];
   secondCandidates: string[];
   themeColor: string;
@@ -10,7 +10,7 @@ export interface LotteryConfig {
 export const config: LotteryConfig = {
   title: "社區車位抽選系統",
   totalSpaces: 12,
-  bigSpacesCount: 4, // 前 4 個是大車位
+  bigSpaceNumbers: [1, 2, 3, 4], // 預設 1, 2, 3, 4 是大車位
   candidates: [
     "70-2F", "70-3F", "70-4F", "72-5F", "72-6F", 
     "74-8F", "74-9F", "76-10F", "76-11F", "78-12F"

@@ -31,14 +31,21 @@ const filterQuery = ref('');
 
 const tempConfigStr = ref({
   candidates: '',
-  secondCandidates: ''
+  secondCandidates: '',
+  bigSpaceNumbers: ''
 });
 
 onMounted(() => {
   // Load Config
   const savedConfig = localStorage.getItem(CONFIG_KEY);
   if (savedConfig) {
-    config.value = JSON.parse(savedConfig);
+    const parsedConfig = JSON.parse(savedConfig);
+    // 兼容舊版設定，將 bigSpacesCount 轉換為 bigSpaceNumbers
+    if ('bigSpacesCount' in parsedConfig && !parsedConfig.bigSpaceNumbers) {
+      parsedConfig.bigSpaceNumbers = Array.from({ length: parsedConfig.bigSpacesCount }, (_, i) => i + 1);
+      delete parsedConfig.bigSpacesCount;
+    }
+    config.value = { ...defaultConfig, ...parsedConfig };
   }
   
   // Initialize candidates from current config
@@ -47,6 +54,7 @@ onMounted(() => {
   
   tempConfigStr.value.candidates = config.value.candidates.join('\n');
   tempConfigStr.value.secondCandidates = config.value.secondCandidates.join('\n');
+  tempConfigStr.value.bigSpaceNumbers = config.value.bigSpaceNumbers.join(', ');
 
   // Load Results
   const savedResults = localStorage.getItem(STORAGE_KEY);
@@ -83,6 +91,10 @@ const filteredAssignments = computed(() => {
 const isFirstRoundFinished = computed(() => candidates.value.length === 0 || assignments.value.length >= config.value.totalSpaces);
 const isAllFinished = computed(() => isFirstRoundFinished.value && (secondCandidates.value.length === 0 || assignments.value.length >= config.value.totalSpaces));
 
+const isBigSpace = (spaceNumber: number) => {
+  return config.value.bigSpaceNumbers.includes(spaceNumber);
+};
+
 const drawNext = () => {
   if (isRolling.value || isAllFinished.value) return;
   isRolling.value = true;
@@ -103,7 +115,7 @@ const drawNext = () => {
         newAssignments.push({
           spaceNumber: currentSpaceNum,
           unitId: picked,
-          type: currentSpaceNum <= config.value.bigSpacesCount ? '大' : '小'
+          type: isBigSpace(currentSpaceNum) ? '大' : '小'
         });
       }
     }
@@ -132,11 +144,18 @@ const saveConfig = () => {
   config.value.candidates = tempConfigStr.value.candidates.split('\n').map(s => s.trim()).filter(s => s);
   config.value.secondCandidates = tempConfigStr.value.secondCandidates.split('\n').map(s => s.trim()).filter(s => s);
   
+  const parsedNumbers = tempConfigStr.value.bigSpaceNumbers
+    .split(',')
+    .map(s => parseInt(s.trim()))
+    .filter(n => !isNaN(n));
+  config.value.bigSpaceNumbers = parsedNumbers;
+  tempConfigStr.value.bigSpaceNumbers = parsedNumbers.join(', '); // 格式化回去
+  
   if (assignments.value.length === 0) {
     candidates.value = [...config.value.candidates];
     secondCandidates.value = [...config.value.secondCandidates];
   } else {
-    alert('設定已儲存。由於已有抽選結果，名單變更將在重置後完全生效。');
+    alert('設定已儲存。由於已有抽選結果，名單變更將在重置後完全生效。請注意，若您更改了大車位編號，已抽出的結果類型標籤需要重置才會更新。');
   }
   showConfig.value = false;
 };
@@ -219,8 +238,8 @@ const handleSwap = (target: SwapTarget) => {
         <button @click="showConfig = true" class="btn-config-icon" title="系統設定">⚙️</button>
       </div>
       <div class="header-stats">
-        <span>大車位: {{ config.bigSpacesCount }}</span>
-        <span>小車位: {{ config.totalSpaces - config.bigSpacesCount }}</span>
+        <span>大車位: {{ config.bigSpaceNumbers.length }}</span>
+        <span>小車位: {{ config.totalSpaces - config.bigSpaceNumbers.length }}</span>
         <span>總名額: {{ config.totalSpaces }}</span>
       </div>
     </header>
@@ -243,8 +262,8 @@ const handleSwap = (target: SwapTarget) => {
               <input v-model.number="config.totalSpaces" type="number">
             </div>
             <div class="form-group">
-              <label>大車位數量 (編號 1 至 X)</label>
-              <input v-model.number="config.bigSpacesCount" type="number">
+              <label>大車位編號 (以逗號分隔，如: 1,3,5)</label>
+              <input v-model="tempConfigStr.bigSpaceNumbers" type="text" placeholder="例如: 1, 2, 3">
             </div>
           </div>
           <div class="form-group">
@@ -353,9 +372,9 @@ const handleSwap = (target: SwapTarget) => {
                 v-for="i in Math.max(0, config.totalSpaces - assignments.length)" 
                 :key="'empty-'+i" 
                 class="space-item empty"
-                :class="(assignments.length + i) <= config.bigSpacesCount ? 'type-big' : 'type-small'"
+                :class="isBigSpace(assignments.length + i) ? 'type-big' : 'type-small'"
               >
-                <div class="space-badge">{{ (assignments.length + i) <= config.bigSpacesCount ? '大' : '小' }}</div>
+                <div class="space-badge">{{ isBigSpace(assignments.length + i) ? '大' : '小' }}</div>
                 <div class="space-info">
                   <span class="no">#{{ assignments.length + i }}</span>
                   <span class="unit">待抽</span>
