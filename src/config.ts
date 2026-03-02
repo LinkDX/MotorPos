@@ -9,7 +9,7 @@ export interface LotteryConfig {
 
 export const config: LotteryConfig = {
   title: "社區車位抽選系統",
-  totalSpaces: 12,
+  totalSpaces: 78,
   bigSpaceNumbers: [1, 2, 3, 4], // 預設 1, 2, 3, 4 是大車位
   candidates: [
     "70-2F", "70-3F", "70-4F", "72-5F", "72-6F", 

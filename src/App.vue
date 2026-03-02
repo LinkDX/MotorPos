@@ -35,12 +35,34 @@ const tempConfigStr = ref({
   bigSpaceNumbers: ''
 });
 
+// 輔助函式：將數字陣列轉換為範圍字串 (如 [1,2,3,5] -> "1-3, 5")
+const formatNumbersToRanges = (nums: number[]) => {
+  if (!nums.length) return '';
+  const sorted = [...nums].sort((a, b) => a - b);
+  const ranges = [];
+  let start = sorted[0] as number;
+  let end = sorted[0] as number;
+
+  for (let i = 1; i <= sorted.length; i++) {
+    if (i < sorted.length && sorted[i] === end + 1) {
+      end = sorted[i] as number;
+    } else {
+      ranges.push(start === end ? `${start}` : `${start}-${end}`);
+      if (i < sorted.length) {
+        start = sorted[i] as number;
+        end = sorted[i] as number;
+      }
+    }
+  }
+  return ranges.join(', ');
+};
+
 onMounted(() => {
   // Load Config
   const savedConfig = localStorage.getItem(CONFIG_KEY);
   if (savedConfig) {
     const parsedConfig = JSON.parse(savedConfig);
-    // 兼容舊版設定，將 bigSpacesCount 轉換為 bigSpaceNumbers
+    // 兼容舊版設定
     if ('bigSpacesCount' in parsedConfig && !parsedConfig.bigSpaceNumbers) {
       parsedConfig.bigSpaceNumbers = Array.from({ length: parsedConfig.bigSpacesCount }, (_, i) => i + 1);
       delete parsedConfig.bigSpacesCount;
@@ -54,7 +76,7 @@ onMounted(() => {
   
   tempConfigStr.value.candidates = config.value.candidates.join('\n');
   tempConfigStr.value.secondCandidates = config.value.secondCandidates.join('\n');
-  tempConfigStr.value.bigSpaceNumbers = config.value.bigSpaceNumbers.join(', ');
+  tempConfigStr.value.bigSpaceNumbers = formatNumbersToRanges(config.value.bigSpaceNumbers);
 
   // Load Results
   const savedResults = localStorage.getItem(STORAGE_KEY);
@@ -144,12 +166,27 @@ const saveConfig = () => {
   config.value.candidates = tempConfigStr.value.candidates.split('\n').map(s => s.trim()).filter(s => s);
   config.value.secondCandidates = tempConfigStr.value.secondCandidates.split('\n').map(s => s.trim()).filter(s => s);
   
-  const parsedNumbers = tempConfigStr.value.bigSpaceNumbers
-    .split(',')
-    .map(s => parseInt(s.trim()))
-    .filter(n => !isNaN(n));
-  config.value.bigSpaceNumbers = parsedNumbers;
-  tempConfigStr.value.bigSpaceNumbers = parsedNumbers.join(', '); // 格式化回去
+  const parsedNumbers: number[] = [];
+  tempConfigStr.value.bigSpaceNumbers.split(',').forEach(part => {
+    const p = part.trim();
+    if (!p) return;
+    
+    const rangeMatch = p.match(/^(\d+)-(\d+)$/);
+    if (rangeMatch) {
+      const start = parseInt(rangeMatch[1] ?? '0');
+      const end = parseInt(rangeMatch[2] ?? '0');
+      for (let i = Math.min(start, end); i <= Math.max(start, end); i++) {
+        parsedNumbers.push(i);
+      }
+    } else {
+      const num = parseInt(p);
+      if (!isNaN(num)) parsedNumbers.push(num);
+    }
+  });
+  
+  const sortedUniqueNumbers = Array.from(new Set(parsedNumbers)).sort((a, b) => a - b);
+  config.value.bigSpaceNumbers = sortedUniqueNumbers;
+  tempConfigStr.value.bigSpaceNumbers = formatNumbersToRanges(sortedUniqueNumbers);
   
   if (assignments.value.length === 0) {
     candidates.value = [...config.value.candidates];
@@ -262,8 +299,8 @@ const handleSwap = (target: SwapTarget) => {
               <input v-model.number="config.totalSpaces" type="number">
             </div>
             <div class="form-group">
-              <label>大車位編號 (以逗號分隔，如: 1,3,5)</label>
-              <input v-model="tempConfigStr.bigSpaceNumbers" type="text" placeholder="例如: 1, 2, 3">
+              <label>大車位編號 (支援範圍，如: 1-36, 64)</label>
+              <input v-model="tempConfigStr.bigSpaceNumbers" type="text" placeholder="例如: 1-36, 64">
             </div>
           </div>
           <div class="form-group">
